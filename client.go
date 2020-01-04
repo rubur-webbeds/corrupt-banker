@@ -1,20 +1,20 @@
 package main
 
 import (
-	"log"
 	"encoding/json"
-	"github.com/streadway/amqp"
+	"fmt"
+	"log"
 	"math/rand"
 	"os"
-	"fmt"
 	"time"
+
+	"github.com/streadway/amqp"
 )
 
 var MAX_OPERATIONS int = 4
 var MAX_AMOUNT int = 10
 
-
-type Transaction struct{
+type Transaction struct {
 	Action string
 	Amount int
 }
@@ -26,7 +26,7 @@ func failOnError(err error, msg string) {
 }
 
 func getTransaction(number float64) string {
-	if(number <= 0.7){
+	if number <= 0.7 {
 		return "add"
 	}
 	return "subs"
@@ -43,11 +43,11 @@ func main() {
 
 	q, err := ch.QueueDeclare(
 		"transactions", // name
-		false,   // durable
-		false,   // delete when unused
-		false,   // exclusive
-		false,   // no-wait
-		nil,     // arguments
+		false,          // durable
+		false,          // delete when unused
+		false,          // exclusive
+		false,          // no-wait
+		nil,            // arguments
 	)
 	failOnError(err, "Failed to declare a queue")
 
@@ -61,24 +61,26 @@ func main() {
 
 	for i := 0; i < n_trans; i++ {
 		trans := getTransaction(random.Float64())
-		amount := random.Intn(MAX_AMOUNT)
+		amount := 1 + random.Intn(MAX_AMOUNT)
 		fmt.Printf("Transaction %d: %s %d\n", i+1, trans, amount)
+
+		bytes, err := json.Marshal(Transaction{Action: trans, Amount: amount})
+		failOnError(err, "Failed to encode")
+
+		//go publishTransaction(bytes, q.Name, ch)
+
+		err = ch.Publish(
+			"",     // exchange
+			q.Name, // routing key
+			false,  // mandatory
+			false,  // immediate
+			amqp.Publishing{
+				ContentType: "text/plain",
+				Body:        []byte(bytes),
+			})
+
+		log.Printf(" [x] Sent %s", bytes)
+		failOnError(err, "Failed to publish a message")
+
 	}
-
-	bytes, err := json.Marshal(Transaction{"subs", 3})
-	failOnError(err, "Failed to encode")
-
-	body := bytes
-
-	err = ch.Publish(
-		"",     // exchange
-		q.Name, // routing key
-		false,  // mandatory
-		false,  // immediate
-		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        []byte(body),
-		})
-	log.Printf(" [x] Sent %s", body)
-	failOnError(err, "Failed to publish a message")
 }
