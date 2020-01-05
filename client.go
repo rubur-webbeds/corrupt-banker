@@ -15,8 +15,9 @@ var MAX_OPERATIONS int = 4
 var MAX_AMOUNT int = 10
 
 type Transaction struct {
-	Action string
-	Amount int
+	Action   string
+	Amount   int
+	ClientId string
 }
 
 func failOnError(err error, msg string) {
@@ -64,10 +65,8 @@ func main() {
 		amount := 1 + random.Intn(MAX_AMOUNT)
 		fmt.Printf("Transaction %d: %s %d\n", i+1, trans, amount)
 
-		bytes, err := json.Marshal(Transaction{Action: trans, Amount: amount})
+		bytes, err := json.Marshal(Transaction{Action: trans, Amount: amount, ClientId: os.Args[1]})
 		failOnError(err, "Failed to encode")
-
-		//go publishTransaction(bytes, q.Name, ch)
 
 		err = ch.Publish(
 			"",     // exchange

@@ -1,17 +1,19 @@
 package main
 
 import (
-	"log"
-	"fmt"
 	"encoding/json"
+	"fmt"
+	"log"
+
 	"github.com/streadway/amqp"
 )
 
 var amount int
 
-type Transaction struct{
-	Action string
-	Amount int
+type Transaction struct {
+	Action   string
+	Amount   int
+	ClientId string
 }
 
 func failOnError(err error, msg string) {
@@ -20,8 +22,9 @@ func failOnError(err error, msg string) {
 	}
 }
 
-func execTransaction(t Transaction){
-	switch t.Action{
+func execTransaction(t Transaction) {
+	fmt.Printf("Client %s: ", t.ClientId)
+	switch t.Action {
 	case "add":
 		fmt.Printf("Adding %d\n", t.Amount)
 		addAmount(t.Amount)
@@ -34,14 +37,14 @@ func execTransaction(t Transaction){
 	fmt.Printf("AMOUNT: %d\n", amount)
 }
 
-func addAmount(a int){
+func addAmount(a int) {
 	amount += a
 }
 
-func subsAmount(a int){
-	if amount - a < 0 {
+func subsAmount(a int) {
+	if amount-a < 0 {
 		fmt.Printf("Can't substract %d\n", a)
-	}else{
+	} else {
 		amount -= a
 	}
 }
@@ -57,11 +60,11 @@ func main() {
 
 	q, err := ch.QueueDeclare(
 		"transactions", // name
-		false,   // durable
-		false,   // delete when unused
-		false,   // exclusive
-		false,   // no-wait
-		nil,     // arguments
+		false,          // durable
+		false,          // delete when unused
+		false,          // exclusive
+		false,          // no-wait
+		nil,            // arguments
 	)
 	failOnError(err, "Failed to declare a queue")
 
@@ -92,7 +95,8 @@ func main() {
 	for d := range msgs {
 		var t Transaction
 		json.Unmarshal(d.Body, &t)
-		go execTransaction(t)
+		execTransaction(t)
+
 		//log.Printf("Received a message: %s:%d\n", t.Action, t.Amount)
 	}
 
