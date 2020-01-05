@@ -42,7 +42,8 @@ func main() {
 	failOnError(err, "Failed to open a channel")
 	defer ch.Close()
 
-	q, err := ch.QueueDeclare(
+	// TRANSACTIONS QUEUE
+	transactions_q, err := ch.QueueDeclare(
 		"transactions", // name
 		false,          // durable
 		false,          // delete when unused
@@ -50,7 +51,37 @@ func main() {
 		false,          // no-wait
 		nil,            // arguments
 	)
-	failOnError(err, "Failed to declare a queue")
+	failOnError(err, "Failed to declare a queue: transactions")
+
+	// RESULTS QUEUE
+	results_q, err := ch.QueueDeclare(
+		"results", // name
+		false,     // durable
+		false,     // delete when unused
+		false,     // exclusive
+		false,     // no-wait
+		nil,       // arguments
+	)
+	failOnError(err, "Failed to declare a queue: results")
+
+	err = ch.ExchangeDeclare(
+		"results", // name
+		"direct",  // type
+		true,      // durable
+		false,     // auto-deleted
+		false,     // internal
+		false,     // no-wait
+		nil,       // arguments
+	)
+	failOnError(err, "Failed to declare an exchange")
+
+	err = ch.QueueBind(
+		results_q.Name, // queue name
+		os.Args[1],     // routing key
+		"results",      // exchange
+		false,
+		nil)
+	failOnError(err, "Failed to bind a queue")
 
 	// create the random number generator
 	seed := rand.NewSource(time.Now().UnixNano())
@@ -69,10 +100,10 @@ func main() {
 		failOnError(err, "Failed to encode")
 
 		err = ch.Publish(
-			"",     // exchange
-			q.Name, // routing key
-			false,  // mandatory
-			false,  // immediate
+			"",                  // exchange
+			transactions_q.Name, // routing key
+			false,               // mandatory
+			false,               // immediate
 			amqp.Publishing{
 				ContentType: "text/plain",
 				Body:        []byte(bytes),
@@ -81,5 +112,11 @@ func main() {
 		log.Printf(" [x] Sent %s", bytes)
 		failOnError(err, "Failed to publish a message")
 
+		msg, ok, err := ch.Get(results_q.Name, true)
+		failOnError(err, "Failed to consume")
+
+		if ok {
+			fmt.Printf("Banker says: %s\n", msg.Body)
+		}
 	}
 }

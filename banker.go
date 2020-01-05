@@ -58,7 +58,8 @@ func main() {
 	failOnError(err, "Failed to open a channel")
 	defer ch.Close()
 
-	q, err := ch.QueueDeclare(
+	// TRANSACTIONS QUEUE
+	transactions_q, err := ch.QueueDeclare(
 		"transactions", // name
 		false,          // durable
 		false,          // delete when unused
@@ -66,28 +67,40 @@ func main() {
 		false,          // no-wait
 		nil,            // arguments
 	)
-	failOnError(err, "Failed to declare a queue")
+	failOnError(err, "Failed to declare a queue: transactions")
+
+	/* // RESULTS QUEUE
+	results_q, err := ch.QueueDeclare(
+		"results", // name
+		false,     // durable
+		false,     // delete when unused
+		false,     // exclusive
+		false,     // no-wait
+		nil,       // arguments
+	)
+	failOnError(err, "Failed to declare a queue: results") */
+
+	err = ch.ExchangeDeclare(
+		"results", // name
+		"direct",  // type
+		true,      // durable
+		false,     // auto-deleted
+		false,     // internal
+		false,     // no-wait
+		nil,       // arguments
+	)
+	failOnError(err, "Failed to declare an exchange")
 
 	msgs, err := ch.Consume(
-		q.Name, // queue
-		"",     // consumer
-		true,   // auto-ack
-		false,  // exclusive
-		false,  // no-local
-		false,  // no-wait
-		nil,    // args
+		transactions_q.Name, // queue
+		"",                  // consumer
+		true,                // auto-ack
+		false,               // exclusive
+		false,               // no-local
+		false,               // no-wait
+		nil,                 // args
 	)
 	failOnError(err, "Failed to register a consumer")
-
-	/*forever := make(chan bool)
-
-	/go func() {
-		for d := range msgs {
-			var t Transaction
-			json.Unmarshal(d.Body, &t)
-			log.Printf("Received a message: %s:%d\n", t.Action, t.Amount)
-		}
-	}()*/
 
 	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
 	fmt.Printf("AMOUNT: %d\n", amount)
@@ -97,8 +110,17 @@ func main() {
 		json.Unmarshal(d.Body, &t)
 		execTransaction(t)
 
-		//log.Printf("Received a message: %s:%d\n", t.Action, t.Amount)
+		body := "Bye World!"
+		err = ch.Publish(
+			"results",  // exchange
+			t.ClientId, // routing key
+			false,      // mandatory
+			false,      // immediate
+			amqp.Publishing{
+				ContentType: "text/plain",
+				Body:        []byte(body),
+			})
+		//fmt.Printf(" [x] Sent %s", body)
+		failOnError(err, "Failed to publish a message")
 	}
-
-	//<-forever
 }
