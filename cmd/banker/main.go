@@ -10,10 +10,13 @@ import (
 	"github.com/streadway/amqp"
 )
 
-var amount int
-var THIEF_MINIMUM int = 20
+// ThiefMinimum : the banker will notify the thief when Amount >= ThiefMinimum
+const ThiefMinimum int = 20
 
-type Transaction struct {
+// Balance of the shared account
+var amount int
+
+/* type Transaction struct {
 	Action   string
 	Amount   int
 	ClientId string
@@ -31,7 +34,7 @@ func failOnError(err error, msg string) {
 	if err != nil {
 		log.Fatalf("%s: %s", msg, err)
 	}
-}
+} */
 
 func execTransaction(t Transaction) TransactionResult {
 	result := TransactionResult{
@@ -69,10 +72,9 @@ func subsAmount(a int) bool {
 	if amount-a < 0 {
 		fmt.Printf("Can't substract %d\n", a)
 		return false
-	} else {
-		amount -= a
-		return true
 	}
+	amount -= a
+	return true
 }
 
 func main() {
@@ -85,7 +87,7 @@ func main() {
 	defer ch.Close()
 
 	// TRANSACTIONS QUEUE
-	transactions_q, err := ch.QueueDeclare(
+	transactionsQueue, err := ch.QueueDeclare(
 		"transactions", // name
 		false,          // durable
 		false,          // delete when unused
@@ -96,7 +98,7 @@ func main() {
 	failOnError(err, "Failed to declare a queue: transactions")
 
 	// RESULTS QUEUE
-	results_q, err := ch.QueueDeclare(
+	resultsQueue, err := ch.QueueDeclare(
 		"results", // name
 		false,     // durable
 		false,     // delete when unused
@@ -107,7 +109,7 @@ func main() {
 	failOnError(err, "Failed to declare a queue: results")
 
 	// THIEF QUEUE
-	thief_q, err := ch.QueueDeclare(
+	thiefQueue, err := ch.QueueDeclare(
 		"thief", // name
 		false,   // durable
 		false,   // delete when unused
@@ -115,17 +117,17 @@ func main() {
 		false,   // no-wait
 		nil,     // arguments
 	)
-	_ = thief_q
+	_ = thiefQueue
 	failOnError(err, "Failed to declare a queue: transactions")
 
 	msgs, err := ch.Consume(
-		transactions_q.Name, // queue
-		"",                  // consumer
-		true,                // auto-ack
-		false,               // exclusive
-		false,               // no-local
-		false,               // no-wait
-		nil,                 // args
+		transactionsQueue.Name, // queue
+		"",                     // consumer
+		true,                   // auto-ack
+		false,                  // exclusive
+		false,                  // no-local
+		false,                  // no-wait
+		nil,                    // args
 	)
 	failOnError(err, "Failed to register a consumer")
 
@@ -140,19 +142,19 @@ func main() {
 		for d := range msgs {
 
 			// notify the thief
-			if amount >= THIEF_MINIMUM {
+			if amount >= ThiefMinimum {
 				err = ch.Publish(
-					"",           // exchange
-					thief_q.Name, // routing key
-					false,        // mandatory
-					false,        // immediate
+					"",              // exchange
+					thiefQueue.Name, // routing key
+					false,           // mandatory
+					false,           // immediate
 					amqp.Publishing{
 						ContentType: "text/plain",
 						Body:        []byte(strconv.Itoa(amount)),
 					})
 				failOnError(err, "Failed to publish a message")
 
-				amount -= THIEF_MINIMUM
+				amount -= ThiefMinimum
 
 				fmt.Println("Ohh all the money disappeared! :O.\nBetter run.\nBye bye from banker ;)")
 				os.Exit(0)
@@ -168,10 +170,10 @@ func main() {
 
 			// send the transaction result to the client
 			err = ch.Publish(
-				"",             // exchange
-				results_q.Name, // routing key
-				false,          // mandatory
-				false,          // immediate
+				"",                // exchange
+				resultsQueue.Name, // routing key
+				false,             // mandatory
+				false,             // immediate
 				amqp.Publishing{
 					ContentType:   "text/plain",
 					CorrelationId: d.CorrelationId,

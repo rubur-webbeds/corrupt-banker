@@ -2,16 +2,15 @@ package main
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/streadway/amqp"
 )
 
-func failOnError(err error, msg string) {
+/* func failOnError(err error, msg string) {
 	if err != nil {
 		log.Fatalf("%s: %s", msg, err)
 	}
-}
+} */
 
 func main() {
 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
@@ -23,7 +22,7 @@ func main() {
 	defer ch.Close()
 
 	// THIEF QUEUE
-	thief_q, err := ch.QueueDeclare(
+	thiefQueue, err := ch.QueueDeclare(
 		"thief", // name
 		false,   // durable
 		false,   // delete when unused
@@ -36,13 +35,13 @@ func main() {
 	fmt.Println(" [*] Waiting for my friend the banker hehe. To exit press CTRL+C")
 
 	msgs, err := ch.Consume(
-		thief_q.Name, // queue
-		"",           // consumer
-		true,         // auto-ack
-		false,        // exclusive
-		false,        // no-local
-		false,        // no-wait
-		nil,          // args
+		thiefQueue.Name, // queue
+		"",              // consumer
+		true,            // auto-ack
+		false,           // exclusive
+		false,           // no-local
+		false,           // no-wait
+		nil,             // args
 	)
 	failOnError(err, "Failed to register a consumer")
 

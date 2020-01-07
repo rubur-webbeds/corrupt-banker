@@ -3,6 +3,6 @@
 counter=1
 while [ $counter -le $1 ]
 do
-go run client.go $counter &
+go run cmd/client/main.go $counter &
 ((counter++))
 done

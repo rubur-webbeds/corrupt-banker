@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand"
 	"os"
 	"time"
@@ -11,10 +10,13 @@ import (
 	"github.com/streadway/amqp"
 )
 
-var MAX_OPERATIONS int = 4
-var MAX_AMOUNT int = 10
+// MaxTransactions to perform by a client
+var MaxTransactions int = 4
 
-type Transaction struct {
+// MaxAmount to add or substract
+var MaxAmount int = 10
+
+/* type Transaction struct {
 	Action   string
 	Amount   int
 	ClientId string
@@ -32,7 +34,7 @@ func failOnError(err error, msg string) {
 	if err != nil {
 		log.Fatalf("%s: %s", msg, err)
 	}
-}
+} */
 
 func getTransaction(number float64) string {
 	if number <= 0.7 {
@@ -51,7 +53,7 @@ func main() {
 	defer ch.Close()
 
 	// TRANSACTIONS QUEUE
-	transactions_q, err := ch.QueueDeclare(
+	transactionsQueue, err := ch.QueueDeclare(
 		"transactions", // name
 		false,          // durable
 		false,          // delete when unused
@@ -62,7 +64,7 @@ func main() {
 	failOnError(err, "Failed to declare a queue: transactions")
 
 	// RESULTS QUEUE
-	results_q, err := ch.QueueDeclare(
+	resultsQueue, err := ch.QueueDeclare(
 		"results", // name
 		false,     // durable
 		false,     // delete when unused
@@ -73,7 +75,7 @@ func main() {
 	failOnError(err, "Failed to declare a queue: results")
 
 	msgs, err := ch.Consume(
-		results_q.Name, // queue
+		resultsQueue.Name, // queue
 		"",             // consumer
 		false,          // auto-ack
 		false,          // exclusive
@@ -87,12 +89,12 @@ func main() {
 	seed := rand.NewSource(time.Now().UnixNano())
 	random := rand.New(seed)
 
-	n_trans := 1 + random.Intn(MAX_OPERATIONS)
-	fmt.Printf("\nI'm the client: %s and I'll do %d transactions!\n", os.Args[1], n_trans)
+	nTrans := 1 + random.Intn(MaxTransactions)
+	fmt.Printf("\nI'm the client: %s and I'll do %d transactions!\n", os.Args[1], nTrans)
 
-	for i := 0; i < n_trans; i++ {
+	for i := 0; i < nTrans; i++ {
 		trans := getTransaction(random.Float64())
-		amount := 1 + random.Intn(MAX_AMOUNT)
+		amount := 1 + random.Intn(MaxAmount)
 		fmt.Printf("Client %s -> Transaction %d: %s %d\n", os.Args[1], i+1, trans, amount)
 
 		bytes, err := json.Marshal(Transaction{Action: trans, Amount: amount, ClientId: os.Args[1]})
@@ -101,7 +103,7 @@ func main() {
 		// send transaction to banker
 		err = ch.Publish(
 			"",                  // exchange
-			transactions_q.Name, // routing key
+			transactionsQueue.Name, // routing key
 			false,               // mandatory
 			false,               // immediate
 			amqp.Publishing{
