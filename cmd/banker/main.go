@@ -16,16 +16,18 @@ const ThiefMinimum int = 20
 // Balance of the shared account
 var amount int
 
-/* type Transaction struct {
+// Transaction type represents operations performed by the client
+type Transaction struct {
 	Action   string
 	Amount   int
-	ClientId string
+	ClientID string
 }
 
+// TransactionResult type represents the result of a transaction
 type TransactionResult struct {
 	Action   string
 	Amount   int
-	ClientId string
+	ClientID string
 	Ok       bool
 	Message  string
 }
@@ -34,15 +36,15 @@ func failOnError(err error, msg string) {
 	if err != nil {
 		log.Fatalf("%s: %s", msg, err)
 	}
-} */
+}
 
 func execTransaction(t Transaction) TransactionResult {
 	result := TransactionResult{
 		Action:   t.Action,
-		ClientId: t.ClientId,
+		ClientID: t.ClientID,
 	}
 
-	fmt.Printf("Client %s: ", t.ClientId)
+	fmt.Printf("Client %s: ", t.ClientID)
 	switch t.Action {
 	case "add":
 		fmt.Printf("Adding %d\n", t.Amount)

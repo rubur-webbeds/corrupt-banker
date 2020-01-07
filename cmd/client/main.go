@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"time"
@@ -13,19 +14,21 @@ import (
 // MaxTransactions to perform by a client
 var MaxTransactions int = 4
 
-// MaxAmount to add or substract
+// MaxAmount to add or substract on each transaction
 var MaxAmount int = 10
 
-/* type Transaction struct {
+// Transaction type represents operations performed by the client
+type Transaction struct {
 	Action   string
 	Amount   int
-	ClientId string
+	ClientID string
 }
 
+// TransactionResult type represents the result of a transaction
 type TransactionResult struct {
 	Action   string
 	Amount   int
-	ClientId string
+	ClientID string
 	Ok       bool
 	Message  string
 }
@@ -34,7 +37,7 @@ func failOnError(err error, msg string) {
 	if err != nil {
 		log.Fatalf("%s: %s", msg, err)
 	}
-} */
+}
 
 func getTransaction(number float64) string {
 	if number <= 0.7 {
@@ -76,12 +79,12 @@ func main() {
 
 	msgs, err := ch.Consume(
 		resultsQueue.Name, // queue
-		"",             // consumer
-		false,          // auto-ack
-		false,          // exclusive
-		false,          // no-local
-		false,          // no-wait
-		nil,            // args
+		"",                // consumer
+		false,             // auto-ack
+		false,             // exclusive
+		false,             // no-local
+		false,             // no-wait
+		nil,               // args
 	)
 	failOnError(err, "Failed to register a consumer")
 
@@ -97,15 +100,15 @@ func main() {
 		amount := 1 + random.Intn(MaxAmount)
 		fmt.Printf("Client %s -> Transaction %d: %s %d\n", os.Args[1], i+1, trans, amount)
 
-		bytes, err := json.Marshal(Transaction{Action: trans, Amount: amount, ClientId: os.Args[1]})
+		bytes, err := json.Marshal(Transaction{Action: trans, Amount: amount, ClientID: os.Args[1]})
 		failOnError(err, "Failed to encode")
 
 		// send transaction to banker
 		err = ch.Publish(
-			"",                  // exchange
+			"",                     // exchange
 			transactionsQueue.Name, // routing key
-			false,               // mandatory
-			false,               // immediate
+			false,                  // mandatory
+			false,                  // immediate
 			amqp.Publishing{
 				ContentType:   "text/plain",
 				CorrelationId: os.Args[1],
