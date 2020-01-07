@@ -4,16 +4,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 
 	"github.com/streadway/amqp"
 )
 
 var amount int
+var THIEF_MINIMUM int = 20
 
 type Transaction struct {
 	Action   string
 	Amount   int
 	ClientId string
+}
+
+type TransactionResult struct {
+	Action   string
+	Amount   int
+	ClientId string
+	Ok       bool
+	Message  string
 }
 
 func failOnError(err error, msg string) {
@@ -22,30 +33,45 @@ func failOnError(err error, msg string) {
 	}
 }
 
-func execTransaction(t Transaction) {
+func execTransaction(t Transaction) TransactionResult {
+	result := TransactionResult{
+		Action:   t.Action,
+		ClientId: t.ClientId,
+	}
+
 	fmt.Printf("Client %s: ", t.ClientId)
 	switch t.Action {
 	case "add":
 		fmt.Printf("Adding %d\n", t.Amount)
-		addAmount(t.Amount)
+		result.Ok = addAmount(t.Amount)
 	case "subs":
 		fmt.Printf("Substracting %d\n", t.Amount)
-		subsAmount(t.Amount)
+		result.Ok = subsAmount(t.Amount)
 	default:
 		log.Printf("Action not defined: %s\n", t.Action)
 	}
-	fmt.Printf("AMOUNT: %d\n", amount)
+	if !result.Ok {
+		result.Message = fmt.Sprintf("Cannot execute transaction %s %d", t.Action, t.Amount)
+	}
+
+	result.Amount = amount
+	fmt.Printf("---> AMOUNT: %d\n", amount)
+
+	return result
 }
 
-func addAmount(a int) {
+func addAmount(a int) bool {
 	amount += a
+	return true
 }
 
-func subsAmount(a int) {
+func subsAmount(a int) bool {
 	if amount-a < 0 {
 		fmt.Printf("Can't substract %d\n", a)
+		return false
 	} else {
 		amount -= a
+		return true
 	}
 }
 
@@ -69,7 +95,7 @@ func main() {
 	)
 	failOnError(err, "Failed to declare a queue: transactions")
 
-	/* // RESULTS QUEUE
+	// RESULTS QUEUE
 	results_q, err := ch.QueueDeclare(
 		"results", // name
 		false,     // durable
@@ -78,18 +104,19 @@ func main() {
 		false,     // no-wait
 		nil,       // arguments
 	)
-	failOnError(err, "Failed to declare a queue: results") */
+	failOnError(err, "Failed to declare a queue: results")
 
-	err = ch.ExchangeDeclare(
-		"results", // name
-		"direct",  // type
-		true,      // durable
-		false,     // auto-deleted
-		false,     // internal
-		false,     // no-wait
-		nil,       // arguments
+	// THIEF QUEUE
+	thief_q, err := ch.QueueDeclare(
+		"thief", // name
+		false,   // durable
+		false,   // delete when unused
+		false,   // exclusive
+		false,   // no-wait
+		nil,     // arguments
 	)
-	failOnError(err, "Failed to declare an exchange")
+	_ = thief_q
+	failOnError(err, "Failed to declare a queue: transactions")
 
 	msgs, err := ch.Consume(
 		transactions_q.Name, // queue
@@ -102,25 +129,58 @@ func main() {
 	)
 	failOnError(err, "Failed to register a consumer")
 
-	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
-	fmt.Printf("AMOUNT: %d\n", amount)
+	fmt.Println(" [*] Waiting for client transactions.\nYou can trust me :). To exit press CTRL+C")
+	fmt.Printf("---> AMOUNT: %d\n", amount)
 
-	for d := range msgs {
-		var t Transaction
-		json.Unmarshal(d.Body, &t)
-		execTransaction(t)
+	forever := make(chan bool)
 
-		body := "Bye World!"
-		err = ch.Publish(
-			"results",  // exchange
-			t.ClientId, // routing key
-			false,      // mandatory
-			false,      // immediate
-			amqp.Publishing{
-				ContentType: "text/plain",
-				Body:        []byte(body),
-			})
-		//fmt.Printf(" [x] Sent %s", body)
-		failOnError(err, "Failed to publish a message")
-	}
+	go func() {
+		for d := range msgs {
+
+			// notify the thief
+			if amount >= THIEF_MINIMUM {
+				err = ch.Publish(
+					"",           // exchange
+					thief_q.Name, // routing key
+					false,        // mandatory
+					false,        // immediate
+					amqp.Publishing{
+						ContentType: "text/plain",
+						Body:        []byte(strconv.Itoa(amount)),
+					})
+				failOnError(err, "Failed to publish a message")
+
+				amount -= THIEF_MINIMUM
+
+				fmt.Println("Ohh all the money disappeared! :O.\nBetter run.\nBye bye from banker ;)")
+				os.Exit(0)
+			}
+
+			var t Transaction
+			json.Unmarshal(d.Body, &t)
+
+			result := execTransaction(t)
+
+			bytes, err := json.Marshal(result)
+			failOnError(err, "Failed to encode")
+
+			// send the transaction result to the client
+			err = ch.Publish(
+				"",             // exchange
+				results_q.Name, // routing key
+				false,          // mandatory
+				false,          // immediate
+				amqp.Publishing{
+					ContentType:   "text/plain",
+					CorrelationId: d.CorrelationId,
+					Body:          []byte(bytes),
+				})
+			failOnError(err, "Failed to publish a message")
+
+		}
+
+		forever <- false
+	}()
+
+	<-forever
 }

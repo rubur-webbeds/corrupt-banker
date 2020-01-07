@@ -20,6 +20,14 @@ type Transaction struct {
 	ClientId string
 }
 
+type TransactionResult struct {
+	Action   string
+	Amount   int
+	ClientId string
+	Ok       bool
+	Message  string
+}
+
 func failOnError(err error, msg string) {
 	if err != nil {
 		log.Fatalf("%s: %s", msg, err)
@@ -64,37 +72,28 @@ func main() {
 	)
 	failOnError(err, "Failed to declare a queue: results")
 
-	err = ch.ExchangeDeclare(
-		"results", // name
-		"direct",  // type
-		true,      // durable
-		false,     // auto-deleted
-		false,     // internal
-		false,     // no-wait
-		nil,       // arguments
+	msgs, err := ch.Consume(
+		results_q.Name, // queue
+		"",             // consumer
+		false,          // auto-ack
+		false,          // exclusive
+		false,          // no-local
+		false,          // no-wait
+		nil,            // args
 	)
-	failOnError(err, "Failed to declare an exchange")
-
-	err = ch.QueueBind(
-		results_q.Name, // queue name
-		os.Args[1],     // routing key
-		"results",      // exchange
-		false,
-		nil)
-	failOnError(err, "Failed to bind a queue")
+	failOnError(err, "Failed to register a consumer")
 
 	// create the random number generator
 	seed := rand.NewSource(time.Now().UnixNano())
 	random := rand.New(seed)
 
-	fmt.Printf("I'm the client: %s\n", os.Args[1])
 	n_trans := 1 + random.Intn(MAX_OPERATIONS)
-	fmt.Printf("I'll do %d transactions!\n", n_trans)
+	fmt.Printf("\nI'm the client: %s and I'll do %d transactions!\n", os.Args[1], n_trans)
 
 	for i := 0; i < n_trans; i++ {
 		trans := getTransaction(random.Float64())
 		amount := 1 + random.Intn(MAX_AMOUNT)
-		fmt.Printf("Transaction %d: %s %d\n", i+1, trans, amount)
+		fmt.Printf("Client %s -> Transaction %d: %s %d\n", os.Args[1], i+1, trans, amount)
 
 		bytes, err := json.Marshal(Transaction{Action: trans, Amount: amount, ClientId: os.Args[1]})
 		failOnError(err, "Failed to encode")
@@ -105,18 +104,26 @@ func main() {
 			false,               // mandatory
 			false,               // immediate
 			amqp.Publishing{
-				ContentType: "text/plain",
-				Body:        []byte(bytes),
+				ContentType:   "text/plain",
+				CorrelationId: os.Args[1],
+				Body:          []byte(bytes),
 			})
 
-		log.Printf(" [x] Sent %s", bytes)
 		failOnError(err, "Failed to publish a message")
 
-		msg, ok, err := ch.Get(results_q.Name, true)
-		failOnError(err, "Failed to consume")
+		for d := range msgs {
+			if os.Args[1] == d.CorrelationId {
+				var t TransactionResult
+				json.Unmarshal(d.Body, &t)
 
-		if ok {
-			fmt.Printf("Banker says: %s\n", msg.Body)
+				if !t.Ok {
+					fmt.Println(t.Message)
+				}
+
+				fmt.Printf("---> AMOUNT: %d\n", t.Amount)
+				d.Ack(true)
+				break
+			}
 		}
 	}
 }
