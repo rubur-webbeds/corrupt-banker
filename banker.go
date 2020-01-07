@@ -135,6 +135,8 @@ func main() {
 	forever := make(chan bool)
 
 	go func() {
+
+		// read transactions
 		for d := range msgs {
 
 			// notify the thief

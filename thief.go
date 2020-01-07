@@ -46,6 +46,7 @@ func main() {
 	)
 	failOnError(err, "Failed to register a consumer")
 
+	// get the loot
 	d := <-msgs
 	fmt.Printf("Gotta run with %s extra dollars!!\nBye", d.Body)
 

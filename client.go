@@ -98,6 +98,7 @@ func main() {
 		bytes, err := json.Marshal(Transaction{Action: trans, Amount: amount, ClientId: os.Args[1]})
 		failOnError(err, "Failed to encode")
 
+		// send transaction to banker
 		err = ch.Publish(
 			"",                  // exchange
 			transactions_q.Name, // routing key
@@ -111,6 +112,7 @@ func main() {
 
 		failOnError(err, "Failed to publish a message")
 
+		// read transaction result
 		for d := range msgs {
 			if os.Args[1] == d.CorrelationId {
 				var t TransactionResult
