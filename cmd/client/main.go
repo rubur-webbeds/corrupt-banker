@@ -12,10 +12,10 @@ import (
 )
 
 // MaxTransactions to perform by a client
-var MaxTransactions int = 4
+const MaxTransactions int = 4
 
 // MaxAmount to add or substract on each transaction
-var MaxAmount int = 10
+const MaxAmount int = 10
 
 // Transaction type represents operations performed by the client
 type Transaction struct {
@@ -39,7 +39,7 @@ func failOnError(err error, msg string) {
 	}
 }
 
-func getTransaction(number float64) string {
+func getAction(number float64) string {
 	if number <= 0.7 {
 		return "add"
 	}
@@ -96,11 +96,11 @@ func main() {
 	fmt.Printf("\nI'm the client: %s and I'll do %d transactions!\n", os.Args[1], nTrans)
 
 	for i := 0; i < nTrans; i++ {
-		trans := getTransaction(random.Float64())
+		action := getAction(random.Float64())
 		amount := 1 + random.Intn(MaxAmount)
-		fmt.Printf("Client %s -> Transaction %d: %s %d\n", os.Args[1], i+1, trans, amount)
+		fmt.Printf("Client %s -> Transaction %d: %s %d\n", os.Args[1], i+1, action, amount)
 
-		bytes, err := json.Marshal(Transaction{Action: trans, Amount: amount, ClientID: os.Args[1]})
+		bytes, err := json.Marshal(Transaction{Action: action, Amount: amount, ClientID: os.Args[1]})
 		failOnError(err, "Failed to encode")
 
 		// send transaction to banker
